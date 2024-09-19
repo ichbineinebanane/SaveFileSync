@@ -1,0 +1,4 @@
+C:\Users\ichbineinebanane\Documents\SaveFileSync\bin\Release\net8.0\win-x64\publish\appsettings.Development.json
+C:\Users\ichbineinebanane\Documents\SaveFileSync\bin\Release\net8.0\win-x64\publish\appsettings.json
+C:\Users\ichbineinebanane\Documents\SaveFileSync\bin\Release\net8.0\win-x64\publish\SaveFileSync.pdb
+C:\Users\ichbineinebanane\Documents\SaveFileSync\bin\Release\net8.0\win-x64\publish\SaveFileSync.exe
