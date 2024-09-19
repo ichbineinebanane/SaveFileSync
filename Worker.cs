@@ -1,22 +1,17 @@
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System.IO;
-using System.Net;
-using System.Linq;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
+using System.Security.Cryptography;
+using Renci.SshNet;
+using Renci.SshNet.Sftp;
 
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly string _processName = "FactoryGameEGS-Win64-Shipping";
     private bool _processIsRunning = false;
-    private readonly Dictionary<string, string> _config;
+    private readonly Dictionary<string, string> config;
     private readonly string _configPath;
+    private const string saveGameExtension = ".sav";
+    private const int maxFiles = 3;
 
     public Worker(ILogger<Worker> logger)
     {
@@ -25,7 +20,7 @@ public class Worker : BackgroundService
         _logger.LogInformation($"ExePath: {exePath}");
         _configPath = Path.Combine(exePath, "config.cfg");
         _logger.LogInformation($"ConfigPath: {_configPath}");
-        _config = ReadConfig(_configPath);
+        config = ReadConfig(_configPath);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -39,13 +34,13 @@ public class Worker : BackgroundService
             if (processes.Length > 0 && !_processIsRunning)
             {
                 _logger.LogInformation("Process started. Running 'download' operation.");
-                DownloadFiles(_config);
+                DownloadFiles();
                 _processIsRunning = true;
             }
             else if (processes.Length == 0 && _processIsRunning)
             {
                 _logger.LogInformation("Process stopped. Running 'upload' operation.");
-                UploadFiles(_config);
+                UploadFiles();
                 _processIsRunning = false;
             }
 
@@ -53,7 +48,7 @@ public class Worker : BackgroundService
         }
     }
 
-    static Dictionary<string, string> ReadConfig(string configPath)
+    private Dictionary<string, string> ReadConfig(string configPath)
     {
         var config = new Dictionary<string, string>();
         foreach (var line in File.ReadAllLines(configPath))
@@ -66,151 +61,232 @@ public class Worker : BackgroundService
         }
         return config;
     }
-
-    static void UploadFiles(Dictionary<string, string> config)
+    private void DownloadFiles()
     {
-        var directory = new DirectoryInfo(config["LocalDirectory"]);
-        var recentFiles = directory.GetFiles()
-            .OrderByDescending(f => f.LastWriteTime)
-            .Take(3)
-            .ToList();
-
-        foreach (var file in recentFiles)
-        {
-            UploadFile(file.FullName, file.Name, config);
-        }
-    }
-
-    static void DownloadFiles(Dictionary<string, string> config)
-    {
-        var ftpFiles = ListFtpFiles(config);
-        var recentFiles = ftpFiles
-            .Where(f => !string.IsNullOrEmpty(f.Name))
-            .OrderByDescending(f => f.Date)
-            .Take(3)
-            .ToList();
-
-        foreach (var file in recentFiles)
-        {
-            DownloadFile(file.Name, config);
-        }
-    }
-
-    static void UploadFile(string localFilePath, string fileName, Dictionary<string, string> config)
-    {
-        string ftpUrl = $"{config["FtpUrl"]}/{fileName}";
-        string username = config["Username"];
-        string password = config["Password"];
-
+        PrivateKeyFile pkfile = new PrivateKeyFile(config["Keyfile"]);
         try
         {
-            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
-            request.Method = WebRequestMethods.Ftp.UploadFile;
-            request.Credentials = new NetworkCredential(username, password);
+            // get the last write time of the newest local files (maybe throw out files that are not of the correct type)
+            var directory = new DirectoryInfo(config["LocalDirectory"]);
+            var localrecentFiles = directory.GetFiles("*" + saveGameExtension)
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Take(maxFiles)
+                .ToList();
 
-            byte[] fileContents = File.ReadAllBytes(localFilePath);
 
-            using (Stream requestStream = request.GetRequestStream())
+            using (var sshclient = new SshClient(config["Hostname"], config["Username"], pkfile))
+            using (var ftpclient = new SftpClient(config["Hostname"], config["Username"], pkfile))
             {
-                requestStream.Write(fileContents, 0, fileContents.Length);
-            }
+                // get last write times of the newest {maxFiles} remote files
+                sshclient.Connect();
+                ftpclient.Connect();
 
-            using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
-            {
-                Console.WriteLine($"Upload of {fileName} complete. Status: {response.StatusDescription}");
-            }
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"An error occurred while uploading {fileName}: {e.Message}");
-        }
-    }
+                var directorylist = ftpclient.ListDirectory(".");
 
-    static void DownloadFile(string fileName, Dictionary<string, string> config)
-    {
-        string ftpUrl = $"{config["FtpUrl"]}/{fileName}";
-        string localFilePath = Path.Combine(config["LocalDirectory"], fileName);
-        string username = config["Username"];
-        string password = config["Password"];
-
-        try
-        {
-            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
-            request.Method = WebRequestMethods.Ftp.DownloadFile;
-            request.Credentials = new NetworkCredential(username, password);
-
-            using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
-            using (Stream responseStream = response.GetResponseStream())
-            using (FileStream fileStream = File.Create(localFilePath))
-            {
-                responseStream.CopyTo(fileStream);
-            }
-
-            Console.WriteLine($"Download of {fileName} complete.");
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"An error occurred while downloading {fileName}: {e.Message}");
-        }
-    }
-
-    static List<FtpFile> ListFtpFiles(Dictionary<string, string> config)
-    {
-        var files = new List<FtpFile>();
-        string ftpUrl = config["FtpUrl"];
-        string username = config["Username"];
-        string password = config["Password"];
-
-        try
-        {
-            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpUrl);
-            request.Method = WebRequestMethods.Ftp.ListDirectoryDetails;
-            request.Credentials = new NetworkCredential(username, password);
-
-            using (FtpWebResponse response = (FtpWebResponse)request.GetResponse())
-            using (Stream responseStream = response.GetResponseStream())
-            using (StreamReader reader = new StreamReader(responseStream))
-            {
-                string line;
-                while ((line = reader.ReadLine()) != null)
+                var remoterecentFiles = new List<ISftpFile>();
+                var dirlist = directorylist.ToList();
+                foreach (var x in dirlist)
                 {
-                    var file = ParseFtpLine(line);
-                    if (file != null && file.Name != "." && file.Name != "..")
+                    string ext = Path.GetExtension(x.Name);
+                    if (x.IsRegularFile && string.Compare(Path.GetExtension(x.Name), saveGameExtension) == 0)
                     {
-                        files.Add(file);
+                        remoterecentFiles.Add(x);
                     }
+                }
+
+                remoterecentFiles.OrderByDescending(f => f.LastWriteTimeUtc);
+
+                var replacelist = new List<FileInfo>();
+
+                // compare files
+                foreach (var file in remoterecentFiles)
+                {
+                    var found = localrecentFiles.Find(f => string.Compare(f.Name, file.Name) == 0);
+                    if (localrecentFiles.Count == 0)
+                    {
+                        replacelist.Add(new FileInfo(directory.FullName + "\\" + file.Name));
+                    }
+                    else if (found != null && found.LastWriteTimeUtc < file.LastWriteTimeUtc)
+                    {
+                        // download if file has the same name and is newer on remote
+                        replacelist.Add(new FileInfo(directory.FullName + "\\" + file.Name));
+                    }
+                    else if (found == null && localrecentFiles[0].LastWriteTimeUtc < file.LastWriteTimeUtc)
+                    {
+                        // also download file if they don't have the same name but it is newer than newest local file
+                        replacelist.Add(new FileInfo(directory.FullName + "\\" + file.Name));
+                    }
+                }
+
+                // download all files that are newer on the server
+                foreach (var replace in replacelist)
+                {
+                    DownloadFile(replace, sshclient, ftpclient);
                 }
             }
         }
         catch (Exception e)
         {
-            Console.WriteLine($"An error occurred while listing FTP files: {e.Message}");
+            _logger.LogInformation("DownloadFiles failed with: " + e.Message);
         }
-
-        return files;
     }
 
-    static FtpFile ParseFtpLine(string line)
+    private void DownloadFile(FileInfo file, SshClient ssh, SftpClient ftp)
     {
-        string pattern = @"^([\w-]+)\s+(\d+)\s+(\w+)\s+(\w+)\s+(\d+)\s+(\w+\s+\d+\s+[\w:]+)\s+(.+)$";
-        Match match = Regex.Match(line, pattern);
-
-        if (match.Success)
+        string md5hash = "";
+        string tempfile = "tmp.sav";
+        try
         {
-            return new FtpFile
+            using SshCommand cmd = ssh.RunCommand("md5sum " + file.Name);
+            md5hash = cmd.Result.Substring(0, cmd.Result.IndexOf(' '));
+
+            using (FileStream fs = File.Create(tempfile))
             {
-                Name = match.Groups[7].Value,
-                Date = DateTime.Parse(match.Groups[6].Value)
-            };
+                ftp.DownloadFile(file.Name, fs);
+            }
+            if (ftp.Exists(file.Name) && string.Compare(md5hash, CalculateMD5(tempfile)) != 0)
+            {
+                // md5hashes do not match
+                File.Delete(tempfile);
+            }
+            else
+            {
+                // md5hashes match, Rename files
+                if (File.Exists(file.FullName))
+                {
+                    File.Delete(file.FullName);
+                }
+                File.Move(tempfile, file.FullName);
+            }
         }
-
-        Console.WriteLine($"Failed to parse FTP line: {line}");
-        return null;
+        catch (Exception e)
+        {
+            _logger.LogError("DownloadFile failed with " + e.Message);
+            // cleanup tempfile if something went wrong
+            if (File.Exists(tempfile))
+            {
+                File.Delete(tempfile);
+            }
+        }
     }
-}
+    private void UploadFiles()
+    {
+        PrivateKeyFile pkfile = new PrivateKeyFile(config["Keyfile"]);
+        try
+        {
+            // get the last write time of the newest local files (maybe throw out files that are not of the correct type)
+            var directory = new DirectoryInfo(config["LocalDirectory"]);
+            var localrecentFiles = directory.GetFiles("*" + saveGameExtension)
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Take(maxFiles)
+                .ToList();
 
-class FtpFile
-{
-    public string Name { get; set; }
-    public DateTime Date { get; set; }
+
+            using (var sshclient = new SshClient(config["Hostname"], config["Username"], pkfile))
+            using (var ftpclient = new SftpClient(config["Hostname"], config["Username"], pkfile))
+            {
+                // get last write times of the newest {maxFiles} remote files
+                sshclient.Connect();
+                ftpclient.Connect();
+
+                var directorylist = ftpclient.ListDirectory(".");
+
+                var remoterecentFiles = new List<ISftpFile>();
+                var dirlist = directorylist.ToList();
+                foreach (var x in dirlist)
+                {
+                    string ext = Path.GetExtension(x.Name);
+                    if (x.IsRegularFile && string.Compare(Path.GetExtension(x.Name), saveGameExtension) == 0)
+                    {
+                        remoterecentFiles.Add(x);
+                    }
+                }
+
+                remoterecentFiles.OrderByDescending(f => f.LastWriteTimeUtc);
+
+                var replacelist = new List<FileInfo>();
+
+                // compare files
+                foreach (var file in localrecentFiles)
+                {
+                    var found = remoterecentFiles.Find(f => string.Compare(f.Name, file.Name) == 0);
+                    if (remoterecentFiles.Count == 0)
+                    {
+                        replacelist.Add(file);
+                    }
+                    else if (found != null && found.LastWriteTimeUtc < file.LastWriteTimeUtc)
+                    {
+                        // upload if file has the same name and is newer on local
+                        replacelist.Add(file);
+                    }
+                    else if (found == null && remoterecentFiles[0].LastWriteTimeUtc < file.LastWriteTimeUtc)
+                    {
+                        // also upload file if they don't have the same name but it is newer than newest remote file
+                        replacelist.Add(file);
+                    }
+                }
+
+                // download all files that are newer on the server
+                foreach (var replace in replacelist)
+                {
+                    UploadFile(replace, sshclient, ftpclient);
+                }
+
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError("UploadFiles failed with: " + e.Message);
+        }
+    }
+
+    private void UploadFile(FileInfo file, SshClient ssh, SftpClient ftp)
+    {
+        string md5hash;
+        string tempfile = "tmp" + saveGameExtension;
+        try
+        {
+            using (FileStream fs = File.OpenRead(file.FullName))
+            {
+                ftp.UploadFile(fs, tempfile);
+            }
+
+            using SshCommand cmd = ssh.RunCommand("md5sum " + tempfile);
+            md5hash = cmd.Result.Substring(0, cmd.Result.IndexOf(' '));
+
+            if (string.Compare(md5hash, CalculateMD5(file.FullName)) != 0)
+            {
+                // md5hashes do not match
+                ftp.Delete(tempfile);
+            }
+            else
+            {
+                // md5hashes match, Rename files
+                if (ftp.Exists(file.Name))
+                {
+                    ftp.Delete(file.Name);
+                }
+                ftp.RenameFile(tempfile, file.Name);
+            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError("UploadFile failed with: " + e.Message);
+            // cleanup tempfile if something went wrong
+            if (ftp.Exists(tempfile))
+            {
+                ftp.Delete(tempfile);
+            }
+        }
+    }
+
+    static string CalculateMD5(string fileName)
+    {
+        using (var md5 = MD5.Create())
+        using (var stream = File.OpenRead(fileName))
+        {
+            var hash = md5.ComputeHash(stream);
+            return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+        }
+    }
 }

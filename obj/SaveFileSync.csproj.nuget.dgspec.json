@@ -1,20 +1,24 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\ichbineinebanane\\Documents\\SaveFileSync\\SaveFileSync.csproj": {}
+    "F:\\SaveGameSync\\SaveFileSync\\SaveFileSync.csproj": {}
   },
   "projects": {
-    "C:\\Users\\ichbineinebanane\\Documents\\SaveFileSync\\SaveFileSync.csproj": {
+    "F:\\SaveGameSync\\SaveFileSync\\SaveFileSync.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\ichbineinebanane\\Documents\\SaveFileSync\\SaveFileSync.csproj",
+        "projectUniqueName": "F:\\SaveGameSync\\SaveFileSync\\SaveFileSync.csproj",
         "projectName": "SaveFileSync",
-        "projectPath": "C:\\Users\\ichbineinebanane\\Documents\\SaveFileSync\\SaveFileSync.csproj",
-        "packagesPath": "C:\\Users\\ichbineinebanane\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\ichbineinebanane\\Documents\\SaveFileSync\\obj\\",
+        "projectPath": "F:\\SaveGameSync\\SaveFileSync\\SaveFileSync.csproj",
+        "packagesPath": "C:\\Users\\flori\\.nuget\\packages\\",
+        "outputPath": "F:\\SaveGameSync\\SaveFileSync\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\ichbineinebanane\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\flori\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
@@ -34,6 +38,11 @@
           "warnAsError": [
             "NU1605"
           ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
         }
       },
       "frameworks": {
@@ -51,8 +60,12 @@
             "Microsoft.NET.ILLink.Tasks": {
               "suppressParent": "All",
               "target": "Package",
-              "version": "[8.0.1, )",
+              "version": "[8.0.8, )",
               "autoReferenced": true
+            },
+            "SSH.NET": {
+              "target": "Package",
+              "version": "[2024.1.0, )"
             }
           },
           "imports": [
@@ -66,26 +79,12 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "downloadDependencies": [
-            {
-              "name": "Microsoft.AspNetCore.App.Runtime.win-x64",
-              "version": "[8.0.1, 8.0.1]"
-            },
-            {
-              "name": "Microsoft.NETCore.App.Runtime.win-x64",
-              "version": "[8.0.1, 8.0.1]"
-            },
-            {
-              "name": "Microsoft.WindowsDesktop.App.Runtime.win-x64",
-              "version": "[8.0.1, 8.0.1]"
-            }
-          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.101/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.400/PortableRuntimeIdentifierGraph.json"
         }
       },
       "runtimes": {
