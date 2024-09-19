@@ -8,7 +8,6 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        // Set the content root path to the executable's directory
         string contentRoot = AppContext.BaseDirectory;
         Directory.SetCurrentDirectory(contentRoot);
 

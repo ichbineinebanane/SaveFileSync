@@ -85,7 +85,7 @@ public class Worker : BackgroundService
     {
         var ftpFiles = ListFtpFiles(config);
         var recentFiles = ftpFiles
-            .Where(f => !string.IsNullOrEmpty(f.Name)) // Filter out null or empty names
+            .Where(f => !string.IsNullOrEmpty(f.Name))
             .OrderByDescending(f => f.Date)
             .Take(3)
             .ToList();
