@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using Renci.SshNet;
@@ -10,7 +12,7 @@ public class Worker : BackgroundService
     private bool _processIsRunning = false;
     private readonly Dictionary<string, string> config;
     private readonly string _configPath;
-    private const string saveGameExtension = ".sav";
+    private const string saveFileExtension = ".sav";
     private const int maxFiles = 3;
 
     public Worker(ILogger<Worker> logger)
@@ -68,7 +70,7 @@ public class Worker : BackgroundService
         {
             // get the last write time of the newest local files (maybe throw out files that are not of the correct type)
             var directory = new DirectoryInfo(config["LocalDirectory"]);
-            var localrecentFiles = directory.GetFiles("*" + saveGameExtension)
+            var localrecentFiles = directory.GetFiles("*" + saveFileExtension)
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .Take(maxFiles)
                 .ToList();
@@ -88,7 +90,7 @@ public class Worker : BackgroundService
                 foreach (var x in dirlist)
                 {
                     string ext = Path.GetExtension(x.Name);
-                    if (x.IsRegularFile && string.Compare(Path.GetExtension(x.Name), saveGameExtension) == 0)
+                    if (x.IsRegularFile && string.Compare(Path.GetExtension(x.Name), saveFileExtension) == 0)
                     {
                         remoterecentFiles.Add(x);
                     }
@@ -157,6 +159,9 @@ public class Worker : BackgroundService
                     File.Delete(file.FullName);
                 }
                 File.Move(tempfile, file.FullName);
+                // client should get the file in question and overwrite the attribute
+                // to the write time of the original file
+                File.SetLastWriteTimeUtc(file.FullName, ftp.Get(file.Name).LastWriteTimeUtc);
             }
         }
         catch (Exception e)
@@ -176,7 +181,7 @@ public class Worker : BackgroundService
         {
             // get the last write time of the newest local files (maybe throw out files that are not of the correct type)
             var directory = new DirectoryInfo(config["LocalDirectory"]);
-            var localrecentFiles = directory.GetFiles("*" + saveGameExtension)
+            var localrecentFiles = directory.GetFiles("*" + saveFileExtension)
                 .OrderByDescending(f => f.LastWriteTimeUtc)
                 .Take(maxFiles)
                 .ToList();
@@ -196,7 +201,7 @@ public class Worker : BackgroundService
                 foreach (var x in dirlist)
                 {
                     string ext = Path.GetExtension(x.Name);
-                    if (x.IsRegularFile && string.Compare(Path.GetExtension(x.Name), saveGameExtension) == 0)
+                    if (x.IsRegularFile && string.Compare(Path.GetExtension(x.Name), saveFileExtension) == 0)
                     {
                         remoterecentFiles.Add(x);
                     }
@@ -205,6 +210,7 @@ public class Worker : BackgroundService
                 remoterecentFiles.OrderByDescending(f => f.LastWriteTimeUtc);
 
                 var replacelist = new List<FileInfo>();
+
 
                 // compare files
                 foreach (var file in localrecentFiles)
@@ -243,7 +249,7 @@ public class Worker : BackgroundService
     private void UploadFile(FileInfo file, SshClient ssh, SftpClient ftp)
     {
         string md5hash;
-        string tempfile = "tmp" + saveGameExtension;
+        string tempfile = "tmp" + saveFileExtension;
         try
         {
             using (FileStream fs = File.OpenRead(file.FullName))
@@ -267,6 +273,7 @@ public class Worker : BackgroundService
                     ftp.Delete(file.Name);
                 }
                 ftp.RenameFile(tempfile, file.Name);
+                ftp.SetLastWriteTimeUtc(file.Name, file.LastWriteTimeUtc);
             }
         }
         catch (Exception e)

@@ -10,7 +10,7 @@ public class Program
     {
         string contentRoot = AppContext.BaseDirectory;
         Directory.SetCurrentDirectory(contentRoot);
-
+        
         Host.CreateDefaultBuilder(args)
             .UseWindowsService()
             .UseContentRoot(contentRoot) 
