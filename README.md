@@ -30,9 +30,15 @@ The keyfile for SSH access to your EC2 instance.
 
 ## Installing the service
 All of the following commands have to be entered in a command prompt with administrator privileges.
+
 Install the service.
+
 ```sc create SaveFileSync binPath="<binPath>"```
-Configure the service to start automaticallya.
+
+Configure the service to start automatically.
+
 ```sc config SaveFileSync start= auto```
+
 Start the service on your own.
+
 ```sc start SaveFileSync```
